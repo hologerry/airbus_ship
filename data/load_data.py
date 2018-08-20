@@ -1,9 +1,13 @@
 """
-load data helper functions
+Data loading helper functions
 """
 import pandas as pd
+import numpy as np
 import os
 from sklearn.model_selection import train_test_split
+from skimage.io import imread
+
+from rle import masks_as_image
 
 def get_unique_img_ids(masks, args):
     """
@@ -35,7 +39,7 @@ def get_balanced_train_test(masks, unique_img_ids, args):
     masks: training segment all masks
     unique_img_ids: returned by get_unique_img_ids func
     Return:
-        train_df:
+        train_df: ImageId EncodedPixels ships has_ships_vec
         valid_df:
     """
     SAMPLES_PER_GROUP = args.samples_per_ship_group
@@ -59,8 +63,33 @@ def get_balanced_train_test(masks, unique_img_ids, args):
     return train_df, valid_df
 
 
-def make_image_gen(df):
-    all
+def make_image_gen(df, args):
+    """Image and mask generator for tensorflow dataset
+    df: train_df or valid_df DataFrame
+    Yield: single (one batch) rgb, mask batch
+    """
+    all_batches = list(df.groupby('ImageId'))
+    ### for one batch
+    # out_rgb = []
+    # out_mask = []
+    while True:
+        for c_img_id, c_masks in all_batches:
+            rgb_path = os.path.join(args.train_img_dir, c_img_id)
+            c_img = imread(rgb_path)
+            c_mask = np.expand_dims(masks_as_image(c_masks['EncodedPixels'].values), -1)
+            if args.img_scaling is not None:
+                c_img = c_img[::args.img_scaling[0], ::args.img_scaling[1]]
+                c_mask = c_mask[::args.img_scaling[0], ::args.img_scaling[1]]
+            ### single sample
+            yield c_img/255.0, c_mask
+            
+            ### one batch
+            # out_rgb += [c_img]
+            # out_mask += [c_mask]
+            # if len(out_rgb) >= args.batch_size:
+            #     yield np.stack(out_rgb, 0)/255.0, np.stack(out_mask, 0)
+            #     out_rgb, out_mask=[], []
+
 
 if __name__ == '__main__':
     ## test whether work

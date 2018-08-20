@@ -14,7 +14,10 @@ class Options():
         train_arg.add_argument("--epochs", type=int, default=30, help="number of epoch")
         train_arg.add_argument("--max_train_steps", type=int, default=300, help="maxium number of steps_per_epoch in training")
         train_arg.add_argument("--img_size", type=tuple, default=(768,768), help="image shape/size")
+        train_arg.add_argument("--img_scaling", type=tuple, default=(4,4), help="downsampling during preprocessing")
+        train_arg.add_argument("--size", type=int, default=768/4, help="image size down sampled")
         train_arg.add_argument("--dataset_dir", type=str, default="/media/gerry/Data_2/kaggle_airbus_data", help="directory of dataset")
+        train_arg.add_argument("--train_masks_csv", type=str, default='train_ship_segmentations.csv', help="train masks csv name")
         train_arg.add_argument("--train_img_dir", type=str, default="train", help="path to train set")
         train_arg.add_argument("--edge_crop", type=int, default=16, help="not understood")
         train_arg.add_argument("--guassian_noise", type=float, default=0.1, help="guassian noise")
@@ -32,6 +35,7 @@ class Options():
         test_arg.add_argument("--csv_dir", type=str, default="results")
         test_arg.add_argument("--debug", type=bool, default=True, help="debug?")
         test_arg.add_argument("--samples_per_ship_group", type=int, default=2000, help="group by ships(ship number), upper bound")
+        test_arg.add_argument("--img_scaling", type=tuple, default=(4,4), help="downsampling during preprocessing")
 
 
     def parse(self):
