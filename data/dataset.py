@@ -20,13 +20,15 @@ class Dataset():
         train_df, valid_df = get_balanced_train_test(masks, unique_img_ids, args)
         train_gen = partial(make_image_gen, df=train_df, args=args)
         valid_gen = partial(make_image_gen, df=valid_df, args=args)
-        tf.set_random_seed(args.seed)
 
         self.train_dataset = tf.data.Dataset.from_generator(
             train_gen, output_types=(tf.float32, tf.int64),
             output_shapes=
                 (tf.TensorShape([args.size, args.size, 3]),
-                tf.TensorShape([args.size, args.size, 1])))
+                tf.TensorShape([args.size, args.size, 1]))).repeat()
+
+        ## used for data augment
+        np.random.seed(args.seed)
 
         self.train_dataset = self.train_dataset.map(map_func=self.data_aug_fn, num_parallel_calls=args.num_parallel_calls)
         self.train_dataset = self.train_dataset.batch(batch_size=args.batch_size)
@@ -52,10 +54,21 @@ class Dataset():
         """
         data augment function used in in tensorflow data map function
         """
-        image = tf.contrib.image.rotate(image, tf.random_uniform([1], maxval=0.25*math.pi))
-        image = tf.image.random_flip_left_right(image)
-        image = tf.image.random_flip_up_down(image)
-        image = tf.image.random_brightness(image, self.args.brightness)
+        rand = np.random.random_sample()
+        if rand > 0.5:
+            ag = tf.random_uniform([1], maxval=0.25*math.pi)
+            image = tf.contrib.image.rotate(image, ag)
+            mask_as_img = tf.contrib.image.rotate(mask_as_img, ag)
+        rand = np.random.random_sample()
+        if rand > 0.5:
+            image = tf.image.flip_left_right(image)
+            mask_as_img = tf.image.flip_left_right(mask_as_img)
+        rand = np.random.random_sample()
+        if rand > 0.5:
+            image = tf.image.flip_up_down(image)
+            mask_as_img = tf.image.flip_up_down(mask_as_img)
+
+        ## TODO: more image augments
 
         return image, mask_as_img
 
@@ -63,6 +76,8 @@ class Dataset():
 if __name__ == "__main__":
     ### test whether the dataset work as expected
     import argparse
+    import matplotlib.pyplot as plt
+
     parser = argparse.ArgumentParser(description="parser of airbus ship competition project")
     parser.add_argument("--dataset_dir", type=str, default="/media/gerry/Data_2/kaggle_airbus_data", help="root directory of dataset")
     parser.add_argument("--train_masks_csv", type=str, default='train_ship_segmentations.csv', help="train masks csv name")
@@ -72,27 +87,48 @@ if __name__ == "__main__":
     parser.add_argument('--samples_per_ship_group', type=int, default=2000, help="upper bound of number of ships per group")
     parser.add_argument('--train_valid_ratio', type=float, default=0.3, help="split ratio")
     parser.add_argument("--img_scaling", type=tuple, default=(4,4), help="downsampling during preprocessing")
-    parser.add_argument("--batch_size", type=int, default=64, help="batch size")
+    parser.add_argument("--batch_size", type=int, default=4, help="batch size")
     parser.add_argument("--num_parallel_calls", type=int, default=16, help="num of parallel calls when preprocessing image")
-    parser.add_argument("--valid_img_count", type=int, default=600, help="number of validation images in one batch to use")
+    parser.add_argument("--valid_img_count", type=int, default=100, help="number of validation images in one batch to use")
     parser.add_argument("--brightness", type=float, default=0.5, help="max delta augment of the img brightness")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
 
     args = parser.parse_args()
 
     t_dataset = Dataset(args)
+    
     features, labels = t_dataset.iter.get_next()
-
-    t_epoch = 2
+    t_epoch = 3
     with tf.Session() as sess:
         print("training ...")
+        sess.run(t_dataset.train_init_op)
         for _ in range(t_epoch):
-            sess.run(t_dataset.train_init_op)
-            f, l = sess.run([features, labels])
-            print(f.shape)
-            print(l.shape)
+            print("one epoch ...")
+            cnt = 0
+            while True:
+                try:
+                    cnt += 1
+                    if (cnt > 3):
+                        break
+                    f, l = sess.run([features, labels])
+                    print("x", f.shape, f.dtype, f.min(), f.max())
+                    print("y", l.shape, l.dtype, l.min(), l.max())
+                    f = f[0][0][0]
+                    l = l[0][0][0]
+                    print("f", f)
+                    print("l", l)
+                    # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
+                    # ax1.imshow(f)
+                    # ax1.set_title("images")
+                    # ax2.imshow(l, cmap="hot")
+                    # ax2.set_title("ships")
+                    # plt.show()
+                except:
+                    print(cnt, "batchs in one epoch")
+                    break
+
         print("validating ... ")
         sess.run(t_dataset.valid_init_op)
         f, l = sess.run([features, labels])
-        print(f.shape)
-        print(l.shape)
+        print("x", f.shape, f.dtype, f.min(), f.max())
+        print("y", l.shape, l.dtype, l.min(), l.max())
