@@ -20,7 +20,7 @@ def get_unique_img_ids(masks, args):
     unique_img_ids['has_ships_vec'] = unique_img_ids['has_ships'].map(lambda x: [x])
 
     unique_img_ids['img_file_size_kb'] = unique_img_ids['ImageId'].map(lambda 
-        c_img_id: os.stat(os.path.join(args.train_img_dir, c_img_id)).st_size/1024)
+        c_img_id: os.stat(os.path.join(args.dataset_dir, args.train_img_dir, c_img_id)).st_size/1024)
 
     ## only keep +50kb img files
     unique_img_ids = unique_img_ids[unique_img_ids['img_file_size_kb'] > 50]
@@ -69,12 +69,9 @@ def make_image_gen(df, args):
     Yield: single (one batch) rgb, mask batch
     """
     all_batches = list(df.groupby('ImageId'))
-    ### for one batch
-    # out_rgb = []
-    # out_mask = []
     while True:
         for c_img_id, c_masks in all_batches:
-            rgb_path = os.path.join(args.train_img_dir, c_img_id)
+            rgb_path = os.path.join(args.dataset_dir, args.train_img_dir, c_img_id)
             c_img = imread(rgb_path)
             c_mask = np.expand_dims(masks_as_image(c_masks['EncodedPixels'].values), -1)
             if args.img_scaling is not None:
@@ -83,12 +80,30 @@ def make_image_gen(df, args):
             ### single sample
             yield c_img/255.0, c_mask
             
+
+def make_image_gen_batch(df, args):
+    """Image and mask generator directly use
+    df: train_df or valid_df DataFrame
+    Yield: one batch rgb, mask batch
+    """
+    all_batches = list(df.groupby('ImageId'))
+    ### for one batch
+    out_rgb = []
+    out_mask = []
+    while True:
+        for c_img_id, c_masks in all_batches:
+            rgb_path = os.path.join(args.dataset_dir, args.train_img_dir, c_img_id)
+            c_img = imread(rgb_path)
+            c_mask = np.expand_dims(masks_as_image(c_masks['EncodedPixels'].values), -1)
+            if args.img_scaling is not None:
+                c_img = c_img[::args.img_scaling[0], ::args.img_scaling[1]]
+                c_mask = c_mask[::args.img_scaling[0], ::args.img_scaling[1]]
             ### one batch
-            # out_rgb += [c_img]
-            # out_mask += [c_mask]
-            # if len(out_rgb) >= args.batch_size:
-            #     yield np.stack(out_rgb, 0)/255.0, np.stack(out_mask, 0)
-            #     out_rgb, out_mask=[], []
+            out_rgb += [c_img]
+            out_mask += [c_mask]
+            if len(out_rgb) >= args.batch_size:
+                yield np.stack(out_rgb, 0)/255.0, np.stack(out_mask, 0)
+                out_rgb, out_mask=[], []
 
 
 if __name__ == '__main__':
@@ -98,15 +113,25 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     
     parser = argparse.ArgumentParser(description="parser of airbus ship competition project")
-    parser.add_argument('--train_img_dir', type=str, default="/media/gerry/Data_2/kaggle_airbus_data/train")
+    parser.add_argument("--dataset_dir", type=str, default="/media/gerry/Data_2/kaggle_airbus_data", help="root directory of dataset")
+    parser.add_argument('--train_img_dir', type=str, default="train", help="train image dir")
     parser.add_argument('--debug', type=bool, default=True, help="debug?")
     parser.add_argument('--samples_per_ship_group', type=int, default=2000, help="upper bound of number of ships per group")
     parser.add_argument('--train_valid_ratio', type=float, default=0.3, help="split ratio")
+    parser.add_argument("--img_scaling", type=tuple, default=(4,4), help="downsampling during preprocessing")
+    parser.add_argument("--batch_size", type=int, default=64, help="batch size")
+
     masks = pd.read_csv('/media/gerry/Data_2/kaggle_airbus_data/train_ship_segmentations.csv')
     args = parser.parse_args()
     
     unique = get_unique_img_ids(masks, args)
-    train, valid = get_balanced_train_test(masks, unique, args)
+    train_df, valid_df = get_balanced_train_test(masks, unique, args)
+    train_gen = make_image_gen(train_df, args)
+    train_x, train_y = next(train_gen)
+    print("x: ", train_x.shape)
+    # print(train_x)
+    print("y: ", train_y.shape)
+    # print(train_y)
     plt.show()
     
     del masks
