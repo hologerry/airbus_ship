@@ -17,8 +17,8 @@ class Options():
         train_arg.add_argument("--img_size", type=tuple, default=(768,768), help="image shape/size")
         train_arg.add_argument("--img_scaling", type=tuple, default=(4,4), help="downsampling during preprocessing")
         train_arg.add_argument("--size", type=int, default=768//4, help="image size down sampled")
-        # train_arg.add_argument("--dataset_dir", type=str, default="/media/gerry/Data_2/kaggle_airbus_data", help="directory of dataset")
-        train_arg.add_argument("--dataset_dir", type=str, default="/S1/CSCL/gaoy/kaggle_airbus_data", help="directory of dataset")
+        train_arg.add_argument("--dataset_dir", type=str, default="/media/gerry/Data_2/kaggle_airbus_data", help="directory of dataset")
+        # train_arg.add_argument("--dataset_dir", type=str, default="/S1/CSCL/gaoy/kaggle_airbus_data", help="directory of dataset")
 
         train_arg.add_argument("--train_masks_csv", type=str, default='train_ship_segmentations.csv', help="train masks csv name")
         train_arg.add_argument("--train_img_dir", type=str, default="train", help="path to train set")

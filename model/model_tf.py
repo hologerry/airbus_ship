@@ -87,4 +87,4 @@ class UnetModel():
     def binary_crossentropy(self, y_true, y_pred, eps=1e-8):
         y_pred = tf.clip_by_value(y_pred, eps, 1-eps)
         y_pred = tf.log(y_pred/(1-y_pred))
-        return tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=y_true, logits=y_pred), axis=0)
+        return tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=y_true, logits=y_pred))

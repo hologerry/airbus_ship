@@ -10,7 +10,7 @@ import os
 from datetime import datetime
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 
 def train(args):
@@ -37,9 +37,10 @@ def train(args):
             epoch_s_time = datetime.now()
             sess.run(dataset.train_init_op)
             for batch in range(args.batches_per_epoch):
-                _, loss = sess.run([optim, loss])
+                _, batch_loss = sess.run([optim, loss])
                 curtime = datetime.now()
-                print("epoch:", epoch, "of", args.epochs, "batch:", batch, "of", args.batchs_per_epoch, "loss: ", loss, "elapsed time:", curtime-epoch_s_time)
+                print("epoch:", epoch, "of", args.epochs, "  batch:", batch, "of", args.batches_per_epoch)
+                print("batch loss:", batch_loss, "  elapsed time:", curtime-epoch_s_time)
             epoch_e_time = datetime.now()
             
             sess.run(dataset.valid_init_op)
