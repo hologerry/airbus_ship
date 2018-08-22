@@ -7,9 +7,9 @@ import numpy as np
 import pandas as pd
 import math
 from functools import partial
-from load_data import make_image_gen
-from load_data import get_balanced_train_test
-from load_data import get_unique_img_ids
+from data.load_data import make_image_gen
+from data.load_data import get_balanced_train_test
+from data.load_data import get_unique_img_ids
 
 class Dataset():
     def __init__(self, args):
@@ -20,9 +20,9 @@ class Dataset():
         train_df, valid_df = get_balanced_train_test(masks, unique_img_ids, args)
         train_gen = partial(make_image_gen, df=train_df, args=args)
         valid_gen = partial(make_image_gen, df=valid_df, args=args)
-
+        
         self.train_dataset = tf.data.Dataset.from_generator(
-            train_gen, output_types=(tf.float32, tf.int64),
+            train_gen, output_types=(tf.float32, tf.float32),
             output_shapes=
                 (tf.TensorShape([args.size, args.size, 3]),
                 tf.TensorShape([args.size, args.size, 1]))).repeat()
@@ -35,7 +35,7 @@ class Dataset():
         self.train_dataset = self.train_dataset.prefetch(1)
         
         self.valid_dataset = tf.data.Dataset.from_generator(
-            valid_gen, output_types=(tf.float32, tf.int64),
+            valid_gen, output_types=(tf.float32, tf.float32),
             output_shapes=
                 (tf.TensorShape([args.size, args.size, 3]),
                 tf.TensorShape([args.size, args.size, 1])))
@@ -75,8 +75,10 @@ class Dataset():
 
 if __name__ == "__main__":
     ### test whether the dataset work as expected
+    print("Testing dataset ...")
     import argparse
     import matplotlib.pyplot as plt
+    import gc
 
     parser = argparse.ArgumentParser(description="parser of airbus ship competition project")
     parser.add_argument("--dataset_dir", type=str, default="/media/gerry/Data_2/kaggle_airbus_data", help="root directory of dataset")
@@ -87,7 +89,7 @@ if __name__ == "__main__":
     parser.add_argument('--samples_per_ship_group', type=int, default=2000, help="upper bound of number of ships per group")
     parser.add_argument('--train_valid_ratio', type=float, default=0.3, help="split ratio")
     parser.add_argument("--img_scaling", type=tuple, default=(4,4), help="downsampling during preprocessing")
-    parser.add_argument("--batch_size", type=int, default=4, help="batch size")
+    parser.add_argument("--batch_size", type=int, default=64, help="batch size")
     parser.add_argument("--num_parallel_calls", type=int, default=16, help="num of parallel calls when preprocessing image")
     parser.add_argument("--valid_img_count", type=int, default=100, help="number of validation images in one batch to use")
     parser.add_argument("--brightness", type=float, default=0.5, help="max delta augment of the img brightness")
@@ -107,22 +109,23 @@ if __name__ == "__main__":
             cnt = 0
             while True:
                 try:
-                    cnt += 1
-                    if (cnt > 3):
-                        break
                     f, l = sess.run([features, labels])
                     print("x", f.shape, f.dtype, f.min(), f.max())
                     print("y", l.shape, l.dtype, l.min(), l.max())
-                    f = f[0][0][0]
-                    l = l[0][0][0]
+                    f = f[0]
+                    l = l[0].reshape([args.size, args.size])
                     print("f", f)
                     print("l", l)
                     # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
                     # ax1.imshow(f)
                     # ax1.set_title("images")
-                    # ax2.imshow(l, cmap="hot")
+                    # ax2.imshow(l, cmap="gray_r")
                     # ax2.set_title("ships")
                     # plt.show()
+                    
+                    cnt += 1
+                    if (cnt > 3):
+                        break
                 except:
                     print(cnt, "batchs in one epoch")
                     break
@@ -132,3 +135,5 @@ if __name__ == "__main__":
         f, l = sess.run([features, labels])
         print("x", f.shape, f.dtype, f.min(), f.max())
         print("y", l.shape, l.dtype, l.min(), l.max())
+
+        gc.collect()

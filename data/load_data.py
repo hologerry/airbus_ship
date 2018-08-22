@@ -7,7 +7,7 @@ import os
 from sklearn.model_selection import train_test_split
 from skimage.io import imread
 
-from rle import masks_as_image
+from data.rle import masks_as_image
 
 def get_unique_img_ids(masks, args):
     """
@@ -55,10 +55,14 @@ def get_balanced_train_test(masks, unique_img_ids, args):
     valid_df = pd.merge(masks, valid_ids)
 
     if args.debug:
+        print(len(train_ids), "training images: ")
+        print(train_ids.head())
+        print(len(valid_ids), "validating images: ")
+        print(train_ids.head())
+        print(len(train_df), "training masks: ")
         print(train_df.head())
-        print(len(train_df), "training masks")
+        print(len(valid_df), "validating masks: ")
         print(valid_df.head())
-        print(len(valid_df), "testing masks")
 
     return train_df, valid_df
 
@@ -117,7 +121,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_img_dir', type=str, default="train", help="train image dir")
     parser.add_argument('--debug', type=bool, default=True, help="debug?")
     parser.add_argument('--samples_per_ship_group', type=int, default=2000, help="upper bound of number of ships per group")
-    parser.add_argument('--train_valid_ratio', type=float, default=0.3, help="split ratio")
+    parser.add_argument('--train_valid_ratio', type=float, default=0.2, help="split ratio")
     parser.add_argument("--img_scaling", type=tuple, default=(4,4), help="downsampling during preprocessing")
     parser.add_argument("--batch_size", type=int, default=64, help="batch size")
 
@@ -126,7 +130,9 @@ if __name__ == '__main__':
     
     unique = get_unique_img_ids(masks, args)
     train_df, valid_df = get_balanced_train_test(masks, unique, args)
-    train_gen = make_image_gen(train_df, args)
+    print("train mask size:", train_df.shape)
+    print("valid mask size:", valid_df.shape)
+    train_gen = make_image_gen_batch(train_df, args)
     train_x, train_y = next(train_gen)
     print("x: ", train_x.shape)
     # print(train_x)
