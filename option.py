@@ -33,7 +33,7 @@ class Options():
         train_arg.add_argument("--brightness", type=float, default=0.5, help="max delta augment of the img brightness")
         train_arg.add_argument("--gpu", type=int, default=1, help="whether to use gpu")
         train_arg.add_argument("--debug", type=bool, default=False, help="debug?")
-        train_arg.add_argument("--lr", type=float, default=0.0001, help="learning rate")
+        train_arg.add_argument("--lr", type=float, default=0.00001, help="learning rate")
         train_arg.add_argument("--ckpt_dir", type=str, default="checkpoint")
         train_arg.add_argument("--ckpt_fr", type=int, default=5, help="checkpoint frequency")
         train_arg.add_argument("--lambda_bce", type=float, default=0.001, help="lambda for binary cross entropy")
