@@ -20,7 +20,7 @@ class Dataset():
         train_df, valid_df = get_balanced_train_test(masks, unique_img_ids, args)
         train_gen = partial(make_image_gen, df=train_df, args=args)
         valid_gen = partial(make_image_gen, df=valid_df, args=args)
-        
+
         self.train_dataset = tf.data.Dataset.from_generator(
             train_gen, output_types=(tf.float32, tf.float32),
             output_shapes=
@@ -33,7 +33,7 @@ class Dataset():
         self.train_dataset = self.train_dataset.map(map_func=self.data_aug_fn, num_parallel_calls=args.num_parallel_calls)
         self.train_dataset = self.train_dataset.batch(batch_size=args.batch_size)
         self.train_dataset = self.train_dataset.prefetch(1)
-        
+
         self.valid_dataset = tf.data.Dataset.from_generator(
             valid_gen, output_types=(tf.float32, tf.float32),
             output_shapes=
@@ -42,10 +42,10 @@ class Dataset():
 
         # self.valid_dataset = self.valid_dataset.map(map_func=self.data_aug_fn, num_parallel_calls=args.num_parallel_calls)
         self.valid_dataset = self.valid_dataset.batch(args.valid_img_count)
-        
+
         self.iter = tf.data.Iterator.from_structure(self.train_dataset.output_types,
                                                     self.train_dataset.output_shapes)
-        
+
         self.train_init_op = self.iter.make_initializer(self.train_dataset)
         self.valid_init_op = self.iter.make_initializer(self.valid_dataset)
 
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     t_dataset = Dataset(args)
-    
+
     features, labels = t_dataset.iter.get_next()
     t_epoch = 3
     with tf.Session() as sess:
@@ -122,7 +122,7 @@ if __name__ == "__main__":
                     # ax2.imshow(l, cmap="gray_r")
                     # ax2.set_title("ships")
                     # plt.show()
-                    
+
                     cnt += 1
                     if (cnt > 3):
                         break

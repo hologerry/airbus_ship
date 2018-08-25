@@ -60,18 +60,18 @@ class UnetModel():
             conv11_2 = tf.layers.conv2d(conv11_1, filters=16, kernel_size=(3,3), padding="same", activation=tf.nn.relu, name="conv11_2")
 
             out = tf.layers.conv2d(conv11_2, filters=1, kernel_size=(1,1), padding="same", activation=tf.nn.sigmoid, name="out_conv")
-        
+
         return out
 
 
     def cal_loss(self, y_true, y_pred):
         # return self.IoU(y_true, y_pred) + self.args.lambda_bce * self.binary_crossentropy(y_true, y_pred)
         return self.IoU(y_true, y_pred)
-    
+
     def save_checkpoint(self, saver, sess, model_epoch):
         saver.save(sess, os.path.join(self.args.ckpt_dir, "model_"+str(model_epoch)+".ckpt"))
 
-    
+
     def save_summary(self):
         pass
 

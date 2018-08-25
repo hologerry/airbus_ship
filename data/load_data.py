@@ -19,7 +19,7 @@ def get_unique_img_ids(masks, args):
     unique_img_ids['has_ships'] = unique_img_ids['ships'].map(lambda x: 1 if x>0 else 0)
     unique_img_ids['has_ships_vec'] = unique_img_ids['has_ships'].map(lambda x: [x])
 
-    unique_img_ids['img_file_size_kb'] = unique_img_ids['ImageId'].map(lambda 
+    unique_img_ids['img_file_size_kb'] = unique_img_ids['ImageId'].map(lambda
         c_img_id: os.stat(os.path.join(args.dataset_dir, args.train_img_dir, c_img_id)).st_size/1024)
 
     ## only keep +50kb img files
@@ -44,12 +44,12 @@ def get_balanced_train_test(masks, unique_img_ids, args):
     """
     SAMPLES_PER_GROUP = args.samples_per_ship_group
     ratio = args.train_valid_ratio
-    balanced_train_df = unique_img_ids.groupby('ships').apply(lambda x: 
+    balanced_train_df = unique_img_ids.groupby('ships').apply(lambda x:
         x.sample(SAMPLES_PER_GROUP) if len(x) > SAMPLES_PER_GROUP else x)
 
     if args.debug:
         balanced_train_df['ships'].hist(bins=balanced_train_df['ships'].max()+1)
-    
+
     train_ids, valid_ids = train_test_split(balanced_train_df, test_size=ratio, stratify=balanced_train_df['ships'])
     train_df = pd.merge(masks, train_ids)
     valid_df = pd.merge(masks, valid_ids)
@@ -83,7 +83,7 @@ def make_image_gen(df, args):
                 c_mask = c_mask[::args.img_scaling[0], ::args.img_scaling[1]]
             ### single sample
             yield c_img/255.0, c_mask
-            
+
 
 def make_image_gen_batch(df, args):
     """Image and mask generator directly use
@@ -115,7 +115,7 @@ if __name__ == '__main__':
     import gc
     import argparse
     import matplotlib.pyplot as plt
-    
+
     parser = argparse.ArgumentParser(description="parser of airbus ship competition project")
     parser.add_argument("--dataset_dir", type=str, default="/media/gerry/Data_2/kaggle_airbus_data", help="root directory of dataset")
     parser.add_argument('--train_img_dir', type=str, default="train", help="train image dir")
@@ -127,7 +127,7 @@ if __name__ == '__main__':
 
     masks = pd.read_csv('/media/gerry/Data_2/kaggle_airbus_data/train_ship_segmentations.csv')
     args = parser.parse_args()
-    
+
     unique = get_unique_img_ids(masks, args)
     train_df, valid_df = get_balanced_train_test(masks, unique, args)
     print("train mask size:", train_df.shape)
@@ -139,6 +139,6 @@ if __name__ == '__main__':
     print("y: ", train_y.shape)
     # print(train_y)
     plt.show()
-    
+
     del masks
     gc.collect()
