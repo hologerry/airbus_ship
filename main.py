@@ -10,7 +10,7 @@ import os
 from datetime import datetime
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-os.environ['CUDA_VISIBLE_DEVICES'] = ''
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 
 def train(args):
@@ -39,20 +39,21 @@ def train(args):
             for batch in range(args.batches_per_epoch):
                 _, batch_loss = sess.run([optim, loss])
                 curtime = datetime.now()
-                print("epoch:", epoch, "of", args.epochs, "  batch:", batch, "of", args.batches_per_epoch)
-                print("batch loss:", batch_loss, "  elapsed time:", curtime-epoch_s_time)
+                print("epoch:", epoch, "of", args.epochs, " batch:", batch, "of", args.batches_per_epoch, 
+                      "batch loss:", batch_loss, "  elapsed time:", curtime-epoch_s_time)
             epoch_e_time = datetime.now()
             
+            print("Validating for current epoch...")
             sess.run(dataset.valid_init_op)
             tot_valid_loss = 0.0
             for _ in range(args.valid_batches):
-                valid_loss = sess.run([loss])
+                valid_loss = sess.run(loss)
                 tot_valid_loss += valid_loss
-            mean_v_loss = tot_valid_loss / args.valid_batchs
+            mean_v_loss = tot_valid_loss / args.valid_batches
             valid_time = datetime.now()
             print("epoch:", epoch, "mean valid loss:", mean_v_loss, "validate elapsed time: ", valid_time-epoch_e_time)
 
-            if epoch % args.ckpt_fr == 0:
+            if (epoch+1) % args.ckpt_fr == 0:
                 print("saving model for epoch:", epoch)
                 unet.save_checkpoint(saver, sess, epoch)
         
@@ -63,7 +64,6 @@ def train(args):
 def test(args):
     # TODO: test and generate csv
     pass
-
 
 def main():
     args = Options().parse()

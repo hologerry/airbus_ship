@@ -65,8 +65,8 @@ class UnetModel():
 
 
     def cal_loss(self, y_true, y_pred):
-        return self.IoU(y_true, y_pred) + self.args.lambda_bce * self.binary_crossentropy(y_true, y_pred)
-
+        # return self.IoU(y_true, y_pred) + self.args.lambda_bce * self.binary_crossentropy(y_true, y_pred)
+        return self.IoU(y_true, y_pred)
     
     def save_checkpoint(self, saver, sess, model_epoch):
         saver.save(sess, os.path.join(self.args.ckpt_dir, "model_"+str(model_epoch)+".ckpt"))
