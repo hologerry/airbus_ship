@@ -71,7 +71,7 @@ class UnetModel():
     def save_checkpoint(self, saver, sess, model_epoch):
         """ Save model checkpoint
         Arguments:
-            saver {tf.train.Saver} -- [saver]
+            saver {[tf.train.Saver]} -- [saver]
             sess {tf.Session} -- [session to save]
             model_epoch {int} -- [current epoch id to save]
         """
@@ -86,7 +86,7 @@ class UnetModel():
         """
         saver.restore(sess, os.path.join(self.args.ckpt_dir, "model_"+str(model_epoch)+".ckpt"))
 
-    def save_summary(self):
+    def write_summary(self):
         pass
 
 

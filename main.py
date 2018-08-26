@@ -1,5 +1,6 @@
 from option import Options
 from data.dataset import Dataset
+from data.rle import multi_rle_encode
 from model.model_tf import UnetModel
 
 import tensorflow as tf
@@ -62,15 +63,35 @@ def train(args):
 
 
 def test(args):
-    # TODO: test and generate csv
+    dataset = Dataset(args)
     unet = UnetModel(args)
+
     latest_model_epoch = 95
 
     with tf.Session() as sess:
+        test_X, test_img_id = dataset.test_iter.get_next()
+        y_pred = unet.net(test_X)
         saver = tf.train.Saver()
-        unet.restore_checkpoint(sess, saver, latest_model_epoch)
+        unet.restore_checkpoint(saver, sess, latest_model_epoch)
+        sess.run(dataset.test_init_op)
 
+        out_pred_rows = []
 
+        while True:
+            try:
+                curbatch_seg = sess.run(y_pred)
+                for idx, one_seg in enumerate(curbatch_seg):
+                    cur_rles = multi_rle_encode(one_seg)
+                    if cur_rles is not None:
+                        for one_rle in cur_rles:
+                            out_pred_rows += [[test_img_id[idx], one_rle]]
+
+            except:
+                print("Finished test all images")
+                test_df = pd.DataFrame(out_pred_rows)
+                test_df.columns = ['ImageId', 'EncodedPixels']
+                test_df.to_csv(os.path.join(args.result_dir, "submission.csv"))
+                print(test_df.head())
 
 
 def main():

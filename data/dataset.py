@@ -8,46 +8,62 @@ import pandas as pd
 import math
 from functools import partial
 from data.load_data import make_image_gen
-from data.load_data import get_balanced_train_test
+from data.load_data import make_image_gen_test
+from data.load_data import get_balanced_train_valid
 from data.load_data import get_unique_img_ids
 
 class Dataset():
     def __init__(self, args):
-        self.batch_size = args.batch_size
         self.args = args
-        masks = pd.read_csv(os.path.join(args.dataset_dir, args.train_masks_csv))
-        unique_img_ids = get_unique_img_ids(masks, args)
-        train_df, valid_df = get_balanced_train_test(masks, unique_img_ids, args)
-        train_gen = partial(make_image_gen, df=train_df, args=args)
-        valid_gen = partial(make_image_gen, df=valid_df, args=args)
 
-        self.train_dataset = tf.data.Dataset.from_generator(
-            train_gen, output_types=(tf.float32, tf.float32),
-            output_shapes=
-                (tf.TensorShape([args.size, args.size, 3]),
-                tf.TensorShape([args.size, args.size, 1]))).repeat()
+        if self.args.subcommand == "train":
+            self.batch_size = args.batch_size
+            masks = pd.read_csv(os.path.join(args.dataset_dir, args.train_masks_csv))
+            unique_img_ids = get_unique_img_ids(masks, args)
+            train_df, valid_df = get_balanced_train_valid(masks, unique_img_ids, args)
+            train_gen = partial(make_image_gen, df=train_df, args=args)
+            valid_gen = partial(make_image_gen, df=valid_df, args=args)
 
-        ## used for data augment
-        np.random.seed(args.seed)
+            self.train_dataset = tf.data.Dataset.from_generator(
+                train_gen, output_types=(tf.float32, tf.float32),
+                output_shapes=
+                    (tf.TensorShape([args.size, args.size, 3]),
+                    tf.TensorShape([args.size, args.size, 1]))).repeat()
 
-        self.train_dataset = self.train_dataset.map(map_func=self.data_aug_fn, num_parallel_calls=args.num_parallel_calls)
-        self.train_dataset = self.train_dataset.batch(batch_size=args.batch_size)
-        self.train_dataset = self.train_dataset.prefetch(1)
+            ## used for data augment
+            np.random.seed(args.seed)
 
-        self.valid_dataset = tf.data.Dataset.from_generator(
-            valid_gen, output_types=(tf.float32, tf.float32),
-            output_shapes=
-                (tf.TensorShape([args.size, args.size, 3]),
-                tf.TensorShape([args.size, args.size, 1])))
+            self.train_dataset = self.train_dataset.map(map_func=self.data_aug_fn, num_parallel_calls=args.num_parallel_calls)
+            self.train_dataset = self.train_dataset.batch(batch_size=args.batch_size)
+            self.train_dataset = self.train_dataset.prefetch(1)
 
-        # self.valid_dataset = self.valid_dataset.map(map_func=self.data_aug_fn, num_parallel_calls=args.num_parallel_calls)
-        self.valid_dataset = self.valid_dataset.batch(args.valid_img_count)
+            self.valid_dataset = tf.data.Dataset.from_generator(
+                valid_gen, output_types=(tf.float32, tf.float32),
+                output_shapes=
+                    (tf.TensorShape([args.size, args.size, 3]),
+                    tf.TensorShape([args.size, args.size, 1])))
 
-        self.iter = tf.data.Iterator.from_structure(self.train_dataset.output_types,
-                                                    self.train_dataset.output_shapes)
+            # self.valid_dataset = self.valid_dataset.map(map_func=self.data_aug_fn, num_parallel_calls=args.num_parallel_calls)
+            self.valid_dataset = self.valid_dataset.batch(args.valid_batch_size)
 
-        self.train_init_op = self.iter.make_initializer(self.train_dataset)
-        self.valid_init_op = self.iter.make_initializer(self.valid_dataset)
+            self.iter = tf.data.Iterator.from_structure(self.train_dataset.output_types,
+                                                        self.train_dataset.output_shapes)
+
+            self.train_init_op = self.iter.make_initializer(self.train_dataset)
+            self.valid_init_op = self.iter.make_initializer(self.valid_dataset)
+
+        elif self.args.subcommand == "test":
+            test_gen = partial(make_image_gen_test, args=args)
+
+            self.test_dataset = tf.data.Dataset.from_generator(
+                test_gen, output_types=(tf.float32, tf.string),
+                output_shapes=(tf.TensorShape([args.size, args.size, 3]), tf.TensorShape([]))
+            )
+            self.test_dataset = self.test_dataset.batch(args.test_batch_size)
+
+            self.test_iter = tf.data.Iterator.from_structure(self.test_dataset.output_types,
+                                                            self.test_dataset.output_shapes)
+            self.test_init_op = self.test_iter.make_initializer(self.test_dataset)
 
 
     def data_aug_fn(self, image, mask_as_img):

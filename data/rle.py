@@ -74,7 +74,7 @@ def masks_as_image(in_mask_list):
 
 
 if __name__ == "__main__":
-    
+
     # test whether the encode decode work as expected
     import pandas as pd
     import os
@@ -86,23 +86,23 @@ if __name__ == "__main__":
     print(not_empty.sum(), 'masks in', masks[not_empty].ImageId.nunique(), 'images')
     print((~not_empty).sum(), 'masks in', masks.ImageId.nunique(), 'total images')
     print(masks.head())
-    
+
     fig, axes = plt.subplots(1, 4, figsize=(16, 5))
-    
+
     rle_0 = masks.query('ImageId == "00021ddc3.jpg"')['EncodedPixels']
     img_0 = masks_as_image(rle_0)
     axes[0].imshow(img_0)
     axes[0].set_title('Mask as image')
-    
+
     rle_1 = multi_rle_encode(img_0)
     img_1 = masks_as_image(rle_1)
     axes[1].imshow(img_1)
     axes[1].set_title('Re-encode')
-    
+
     img_c = masks_as_color(rle_0)
     axes[2].imshow(img_c)
     axes[2].set_title('Mask in color')
-    
+
     img_c = masks_as_color(rle_1)
     axes[3].imshow(img_c)
     axes[3].set_title('Re-encode in color')

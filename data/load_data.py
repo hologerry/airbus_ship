@@ -34,7 +34,7 @@ def get_unique_img_ids(masks, args):
     return unique_img_ids
 
 
-def get_balanced_train_test(masks, unique_img_ids, args):
+def get_balanced_train_valid(masks, unique_img_ids, args):
     """
     masks: training segment all masks
     unique_img_ids: returned by get_unique_img_ids func
@@ -110,6 +110,26 @@ def make_image_gen_batch(df, args):
                 out_rgb, out_mask=[], []
 
 
+def make_image_gen_test(args):
+    """ Test set image generator
+    Arguments:
+        args {[parser args]} -- [project configurations]
+    """
+    all_test_images = os.listdir(os.path.join(args.dataset_dir, args.test_img_dir))
+
+    if args.debug:
+        print("test size", len(all_test_images))
+
+    while True:
+        for c_img_id in all_test_images:
+            rgb_path = os.path.join(args.dataset_dir, args.test_img_dir, c_img_id)
+            c_img = imread(rgb_path)
+            if args.img_scaling is not None:
+                c_img = c_img[::args.img_scaling[0], ::args.img_scaling[1]]
+            ### single sample
+            yield c_img/255.0, c_img_id
+
+
 if __name__ == '__main__':
     ## test whether work
     import gc
@@ -129,7 +149,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     unique = get_unique_img_ids(masks, args)
-    train_df, valid_df = get_balanced_train_test(masks, unique, args)
+    train_df, valid_df = get_balanced_train_valid(masks, unique, args)
     print("train mask size:", train_df.shape)
     print("valid mask size:", valid_df.shape)
     train_gen = make_image_gen_batch(train_df, args)
