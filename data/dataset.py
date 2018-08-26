@@ -12,11 +12,13 @@ from data.load_data import make_image_gen_test
 from data.load_data import get_balanced_train_valid
 from data.load_data import get_unique_img_ids
 
+
 class Dataset():
     def __init__(self, args):
         self.args = args
 
         if self.args.subcommand == "train":
+            print("Loading training dataset...")
             self.batch_size = args.batch_size
             masks = pd.read_csv(os.path.join(args.dataset_dir, args.train_masks_csv))
             unique_img_ids = get_unique_img_ids(masks, args)
@@ -26,11 +28,10 @@ class Dataset():
 
             self.train_dataset = tf.data.Dataset.from_generator(
                 train_gen, output_types=(tf.float32, tf.float32),
-                output_shapes=
-                    (tf.TensorShape([args.size, args.size, 3]),
-                    tf.TensorShape([args.size, args.size, 1]))).repeat()
+                output_shapes=(tf.TensorShape([args.size, args.size, 3]),
+                               tf.TensorShape([args.size, args.size, 1]))).repeat()
 
-            ## used for data augment
+            # used for data augment
             np.random.seed(args.seed)
 
             self.train_dataset = self.train_dataset.map(map_func=self.data_aug_fn, num_parallel_calls=args.num_parallel_calls)
@@ -51,8 +52,11 @@ class Dataset():
 
             self.train_init_op = self.iter.make_initializer(self.train_dataset)
             self.valid_init_op = self.iter.make_initializer(self.valid_dataset)
+            print("Loaded training dataset...")
+
 
         elif self.args.subcommand == "test":
+            print("Loading testing dataset...")
             test_gen = partial(make_image_gen_test, args=args)
 
             self.test_dataset = tf.data.Dataset.from_generator(
@@ -100,11 +104,11 @@ if __name__ == "__main__":
     parser.add_argument("--dataset_dir", type=str, default="/media/gerry/Data_2/kaggle_airbus_data", help="root directory of dataset")
     parser.add_argument("--train_masks_csv", type=str, default='train_ship_segmentations.csv', help="train masks csv name")
     parser.add_argument('--train_img_dir', type=str, default="train", help="train image dir")
-    parser.add_argument("--size", type=int, default=768//4, help="image size down sampled")
+    parser.add_argument("--size", type=int, default=768, help="image size down sampled")
     parser.add_argument('--debug', type=bool, default=True, help="debug?")
     parser.add_argument('--samples_per_ship_group', type=int, default=2000, help="upper bound of number of ships per group")
     parser.add_argument('--train_valid_ratio', type=float, default=0.3, help="split ratio")
-    parser.add_argument("--img_scaling", type=tuple, default=(4,4), help="downsampling during preprocessing")
+    parser.add_argument("--img_scaling", type=tuple, default=None, help="downsampling during preprocessing")
     parser.add_argument("--batch_size", type=int, default=64, help="batch size")
     parser.add_argument("--num_parallel_calls", type=int, default=16, help="num of parallel calls when preprocessing image")
     parser.add_argument("--valid_img_count", type=int, default=100, help="number of validation images in one batch to use")

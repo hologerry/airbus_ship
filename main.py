@@ -20,10 +20,11 @@ def train(args):
     unet = UnetModel(args)
 
     config = tf.ConfigProto()
-    # config.gpu_options.allow_growth=True
+    config.gpu_options.allow_growth = True  # pylint: disable=E1101
     with tf.Session(config=config) as sess:
+        file_writer = tf.summary.FileWriter(args.summary_dir)
         X, y = dataset.iter.get_next()
-        y_pred = unet.net(X)
+        y_pred = unet.full_res_net(X)
         variables = tf.trainable_variables()
         saver = tf.train.Saver()
         loss = unet.cal_loss(y, y_pred)
@@ -34,7 +35,7 @@ def train(args):
 
         start_time = datetime.now()
         for epoch in range(args.epochs):
-
+            print("Start training the network ...")
             epoch_s_time = datetime.now()
             sess.run(dataset.train_init_op)
             for batch in range(args.batches_per_epoch):
@@ -42,14 +43,23 @@ def train(args):
                 curtime = datetime.now()
                 print("epoch:", epoch, "of", args.epochs, " batch:", batch, "of", args.batches_per_epoch,
                       "batch loss:", batch_loss, "  elapsed time:", curtime-epoch_s_time)
+                if batch % 10 == 0:
+                    loss_sum = tf.summary.Summary()
+                    loss_sum.value.add(tag='train_loss', simple_value=float(batch_loss))  # pylint: disable=E1101
+                    file_writer.add_summary(loss_sum)
+                    file_writer.flush()
             epoch_e_time = datetime.now()
 
             print("Validating for current epoch...")
             sess.run(dataset.valid_init_op)
             tot_valid_loss = 0.0
-            for _ in range(args.valid_batches):
+            for valid_b in range(args.valid_batches):
                 valid_loss = sess.run(loss)
                 tot_valid_loss += valid_loss
+                if valid_b % 10 == 0:
+                    vloss_sum = tf.summary.Summary()
+                    vloss_sum.value.add(tag='valid_loss', simple_value=float(valid_loss))  # pylint: disable=E1101
+                    file_writer.add_summary(vloss_sum)
             mean_v_loss = tot_valid_loss / args.valid_batches
             valid_time = datetime.now()
             print("epoch:", epoch, "mean valid loss:", mean_v_loss, "validate elapsed time: ", valid_time-epoch_e_time)
@@ -63,14 +73,15 @@ def train(args):
 
 
 def test(args):
+    print("Testing the network")
     dataset = Dataset(args)
     unet = UnetModel(args)
 
-    latest_model_epoch = 95
+    latest_model_epoch = 30
 
     with tf.Session() as sess:
         test_X, test_img_id = dataset.test_iter.get_next()
-        y_pred = unet.net(test_X)
+        y_pred = unet.full_res_net(test_X)
         saver = tf.train.Saver()
         unet.restore_checkpoint(saver, sess, latest_model_epoch)
         sess.run(dataset.test_init_op)

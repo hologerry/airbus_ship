@@ -61,8 +61,26 @@ class UnetModel():
 
             out = tf.layers.conv2d(conv11_2, filters=1, kernel_size=(1,1), padding="same", activation=tf.nn.sigmoid, name="out_conv")
 
-        return out
+        return conv11_2
 
+    def full_res_net(self, X):
+        with tf.variable_scope("downsample"):
+            down1 = tf.layers.average_pooling2d(X, pool_size=(2,2), strides=2, name="down1")
+            down2 = tf.layers.average_pooling2d(down1, pool_size=(2,2), strides=2, name="down2")
+        low_dim_out = self.net(down2)
+
+        with tf.variable_scope("upsample"):
+            up1 = tf.layers.conv2d_transpose(low_dim_out, filters=8, kernel_size=(2,2), strides=(2,2), padding="same", name="up1")
+            upconv1 = tf.layers.conv2d(up1, filters=8, kernel_size=(3,3), padding="same", activation=tf.nn.relu, name="upconv1")
+            upconv12 = tf.layers.conv2d(upconv1, filters=8, kernel_size=(3,3), padding="same", activation=tf.nn.relu, name="upconv12")
+
+            up2 = tf.layers.conv2d_transpose(upconv12, filters=4, kernel_size=(2,2), strides=(2,2), padding="same", name="up2")
+            upconv2 = tf.layers.conv2d(up2, filters=4, kernel_size=(3,3), padding="same", activation=tf.nn.relu, name="upconv2")
+            upconv22 = tf.layers.conv2d(upconv2, filters=4, kernel_size=(3,3), padding="same", activation=tf.nn.relu, name="upconv22")
+
+            full_res_out = tf.layers.conv2d(upconv22, filters=1, kernel_size=(3,3), padding="same", activation=tf.nn.relu, name="upconv3")
+
+        return full_res_out
 
     def cal_loss(self, y_true, y_pred):
         # return self.IoU(y_true, y_pred) + self.args.lambda_bce * self.binary_crossentropy(y_true, y_pred)
@@ -86,10 +104,6 @@ class UnetModel():
         """
         saver.restore(sess, os.path.join(self.args.ckpt_dir, "model_"+str(model_epoch)+".ckpt"))
 
-    def write_summary(self):
-        pass
-
-
     def IoU(self, y_true, y_pred, eps=1e-8):
         """ IoU loss function
 
@@ -108,7 +122,6 @@ class UnetModel():
         inter = tf.reduce_sum(y_true*y_pred, axis=[1,2,3])
         union = tf.reduce_sum(y_true, axis=[1,2,3]) + tf.reduce_sum(y_pred, axis=[1,2,3]) - inter
         return -tf.reduce_mean((inter+eps)/(union+eps), axis=0)
-
 
     def binary_crossentropy(self, y_true, y_pred, eps=1e-8):
         y_pred = tf.clip_by_value(y_pred, eps, 1-eps)
