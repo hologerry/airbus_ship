@@ -63,7 +63,15 @@ def train(args):
 
 def test(args):
     # TODO: test and generate csv
-    pass
+    unet = UnetModel(args)
+    latest_model_epoch = 95
+
+    with tf.Session() as sess:
+        saver = tf.train.Saver()
+        unet.restore_checkpoint(sess, saver, latest_model_epoch)
+
+
+
 
 def main():
     args = Options().parse()

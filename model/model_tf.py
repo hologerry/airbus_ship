@@ -69,14 +69,40 @@ class UnetModel():
         return self.IoU(y_true, y_pred)
 
     def save_checkpoint(self, saver, sess, model_epoch):
+        """ Save model checkpoint
+        Arguments:
+            saver {tf.train.Saver} -- [saver]
+            sess {tf.Session} -- [session to save]
+            model_epoch {int} -- [current epoch id to save]
+        """
         saver.save(sess, os.path.join(self.args.ckpt_dir, "model_"+str(model_epoch)+".ckpt"))
 
+    def restore_checkpoint(self, saver, sess, model_epoch):
+        """ Restore model checkpoint
+        Arguments:
+            saver {tf.train.Saver} -- [saver]
+            sess {tf.Session} -- [session to restore]
+            model_epoch {int} -- [epoch id to restore]
+        """
+        saver.restore(sess, os.path.join(self.args.ckpt_dir, "model_"+str(model_epoch)+".ckpt"))
 
     def save_summary(self):
         pass
 
 
     def IoU(self, y_true, y_pred, eps=1e-8):
+        """ IoU loss function
+
+        Arguments:
+            y_true {tf Tensor [batch size, size, size, 1]} -- [ground truth]
+            y_pred {[type]} -- [predictions]
+
+        Keyword Arguments:
+            eps {epsilon} -- [epsilon to smooth the division] (default: {1e-8})
+
+        Returns:
+            [tf.float32] -- [IoU loss]
+        """
         if tf.reduce_max(y_true) == 0:
             return self.IoU(1-y_true, 1-y_pred)
         inter = tf.reduce_sum(y_true*y_pred, axis=[1,2,3])
