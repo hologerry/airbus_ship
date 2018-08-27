@@ -116,7 +116,7 @@ def make_image_gen_test(args):
         args {[parser args]} -- [project configurations]
     """
     all_test_images = os.listdir(os.path.join(args.dataset_dir, args.test_img_dir))
-
+    all_test_images = all_test_images[:30]
     if args.debug:
         print("test size", len(all_test_images))
 

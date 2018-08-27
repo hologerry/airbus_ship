@@ -40,7 +40,6 @@ def multi_rle_encode(img, **kwargs):
     Encode connected regions as separated masks
     """
     labels = label(img)
-    print(labels)
     if img.ndim > 2:
         return [rle_encode(np.sum(labels==k, axis=2), **kwargs) for k in np.unique(labels[labels>0])]
     else:

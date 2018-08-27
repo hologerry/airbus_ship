@@ -64,7 +64,7 @@ def train(args):
             valid_time = datetime.now()
             print("epoch:", epoch, "mean valid loss:", mean_v_loss, "validate elapsed time: ", valid_time-epoch_e_time)
 
-            if (epoch+1) % args.ckpt_fr == 0:
+            if epoch % args.ckpt_fr == 0:
                 print("saving model for epoch:", epoch)
                 unet.save_checkpoint(saver, sess, epoch)
 
@@ -77,7 +77,7 @@ def test(args):
     dataset = Dataset(args)
     unet = UnetModel(args)
 
-    latest_model_epoch = 30
+    latest_model_epoch = 14
 
     with tf.Session() as sess:
         test_X, test_img_id = dataset.test_iter.get_next()
@@ -87,22 +87,20 @@ def test(args):
         sess.run(dataset.test_init_op)
 
         out_pred_rows = []
+        for batch_id in range(args.test_batches):
+            print("Testing batch", batch_id)
+            curbatch_seg = sess.run(y_pred)
+            for idx, one_seg in enumerate(curbatch_seg):
+                cur_rles = multi_rle_encode(one_seg)
+                if cur_rles is not None:
+                    for one_rle in cur_rles:
+                        out_pred_rows += [[test_img_id[idx], one_rle]]
 
-        while True:
-            try:
-                curbatch_seg = sess.run(y_pred)
-                for idx, one_seg in enumerate(curbatch_seg):
-                    cur_rles = multi_rle_encode(one_seg)
-                    if cur_rles is not None:
-                        for one_rle in cur_rles:
-                            out_pred_rows += [[test_img_id[idx], one_rle]]
-
-            except:
-                print("Finished test all images")
-                test_df = pd.DataFrame(out_pred_rows)
-                test_df.columns = ['ImageId', 'EncodedPixels']
-                test_df.to_csv(os.path.join(args.result_dir, "submission.csv"))
-                print(test_df.head())
+        print("Finished test all images")
+        test_df = pd.DataFrame(out_pred_rows)
+        test_df.columns = ['ImageId', 'EncodedPixels']
+        test_df.to_csv(os.path.join(args.result_dir, "submission.csv"))
+        print(test_df.head())
 
 
 def main():
