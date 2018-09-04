@@ -1,113 +1,155 @@
-from option import Options
-from data.dataset import Dataset
-from data.rle import multi_rle_encode
-from model.model_tf import UnetModel
+import os
+import random
+from pathlib import Path
 
-import tensorflow as tf
 import numpy as np
 import pandas as pd
-import sklearn
-import os
-from datetime import datetime
+import torch
+import torch.functional as F
+from torch.optim import Adam
+from tqdm import tqdm
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+from data.data_aug import (CenterCrop, DualCompose, HorizontalFlip, RandomCrop,
+                           VerticalFlip)
+from data.dataset import make_dataloader
+from data.load_data import get_balanced_train_valid, get_unique_img_ids
+from data.rle import multi_rle_encode
+from model.unet import UNet
+from model.loss import LossBinary
+from model.loss import get_jaccard
+from option import Options
+from utils import write_event
+from utils import save_model
 
 
 def train(args):
-    print("Training the network ...")
-    dataset = Dataset(args)
-    unet = UnetModel(args)
+    print("Traning Network...")
+    masks = pd.read_csv(os.path.join(args.dataset_dir, args.train_masks))
+    unique_img_ids = get_unique_img_ids(masks, args)
+    train_df, valid_df = get_balanced_train_valid(masks, unique_img_ids, args)
+    train_transform = DualCompose([
+        HorizontalFlip(),
+        VerticalFlip(),
+        RandomCrop((256, 256, 3)),
+        # ImageOnly(RandomBrightness()),
+        # ImageOnly(RandomContrast()),
+    ])
 
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True  # pylint: disable=E1101
-    with tf.Session(config=config) as sess:
-        file_writer = tf.summary.FileWriter(args.summary_dir)
-        X, y = dataset.iter.get_next()
-        y_pred = unet.full_res_net(X)
-        variables = tf.trainable_variables()
-        saver = tf.train.Saver()
-        loss = unet.cal_loss(y, y_pred)
+    val_transform = DualCompose([
+        CenterCrop((512, 512, 3)),
+    ])
 
-        optim = tf.train.AdamOptimizer(learning_rate=args.lr).minimize(loss, var_list=variables)
+    train_dataloader = make_dataloader(train_df, args, args.batch_size, args.shuffle, transform=train_transform)
+    val_dataloader = make_dataloader(valid_df, args, args.batch_size//2, args.shuffle, transform=val_transform)
 
-        sess.run(tf.global_variables_initializer())
+    model = UNet()
+    optimizer = Adam(model.parameters(), lr=args.lr)
+    if args.gpu:
+        model.cuda()
+    step = 0
+    fold = 1
+    model_path = Path('model_{fold}.pt'.format(fold=fold))
+    log_file = open('train_{fold}.log'.format(fold=fold), 'at', encoding='utf8')
+    loss_fn = LossBinary(jaccard_weight=5)
 
-        start_time = datetime.now()
-        for epoch in range(args.epochs):
-            print("Start training the network ...")
-            epoch_s_time = datetime.now()
-            sess.run(dataset.train_init_op)
-            for batch in range(args.batches_per_epoch):
-                _, batch_loss = sess.run([optim, loss])
-                curtime = datetime.now()
-                print("epoch:", epoch, "of", args.epochs, " batch:", batch, "of", args.batches_per_epoch,
-                      "batch loss:", batch_loss, "  elapsed time:", curtime-epoch_s_time)
-                if batch % 10 == 0:
-                    loss_sum = tf.summary.Summary()
-                    loss_sum.value.add(tag='train_loss', simple_value=float(batch_loss))  # pylint: disable=E1101
-                    file_writer.add_summary(loss_sum)
-                    file_writer.flush()
-            epoch_e_time = datetime.now()
+    valid_losses = []
 
-            print("Validating for current epoch...")
-            sess.run(dataset.valid_init_op)
-            tot_valid_loss = 0.0
-            for valid_b in range(args.valid_batches):
-                valid_loss = sess.run(loss)
-                tot_valid_loss += valid_loss
-                if valid_b % 10 == 0:
-                    vloss_sum = tf.summary.Summary()
-                    vloss_sum.value.add(tag='valid_loss', simple_value=float(valid_loss))  # pylint: disable=E1101
-                    file_writer.add_summary(vloss_sum)
-            mean_v_loss = tot_valid_loss / args.valid_batches
-            valid_time = datetime.now()
-            print("epoch:", epoch, "mean valid loss:", mean_v_loss, "validate elapsed time: ", valid_time-epoch_e_time)
+    for epoch in range(1, args.epochs+1):
+        model.train()
+        random.seed()
+        tq = tqdm(total=len(train_dataloader)*args.batch_size)
+        tq.set_description('Epoch {} of {}, lr {}'.format(epoch, args.epochs, args.lr))
+        losses = []
+        try:
+            mean_loss = 0.
+            for i, (inputs, targets) in enumerate(train_dataloader):
+                inputs, targets = torch.tensor(inputs), torch.tensor(targets)
+                outputs = model(inputs)
+                loss = loss_fn(outputs, targets)
+                loss.backward()
+                optimizer.step()
+                step += 1
+                tq.update(args.batch_size)
+                losses.append(loss.data[0])
+                mean_loss = np.mean(losses[-args.log_fr:])
+                tq.set_postfix(loss="{:.5f}".format(mean_loss))
 
-            if epoch % args.ckpt_fr == 0:
-                print("saving model for epoch:", epoch)
-                unet.save_checkpoint(saver, sess, epoch)
+                if i and (i % args.log_fr) == 0:
+                    write_event(log_file, step, loss=mean_loss)
+            write_event(log_file, step, loss=mean_loss)
+            tq.close()
+            save_model(model, epoch, step, model_path)
+            valid_metrics = validation(args, model, loss_fn, val_dataloader)
+            write_event(log_file, step, **valid_metrics)
+            valid_loss = valid_metrics['valid_loss']
+            valid_losses.append(valid_loss)
+        except KeyboardInterrupt:
+            tq.close()
+            print('Ctrl+C, saving snapshot')
+            save_model(log_file, epoch, step, model_path)
+            print('done.')
+            return
 
-        end_time = datetime.now()
-        print("train finished..", "elpased time:", end_time-start_time)
+
+def validation(args, model: torch.nn.Module, criterion, valid_loader):
+    model.eval()
+    losses = []
+    jaccard = []
+    for inputs, targets in valid_loader:
+        inputs, targets = torch.tensor(inputs), torch.tensor(targets)
+        outputs = model(inputs)
+        loss = criterion(outputs, targets)
+        losses.append(loss.item())
+        jaccard += [get_jaccard(targets, (outputs > 0).float()).item()]
+
+    valid_loss = np.mean(losses)  # type: float
+
+    valid_jaccard = np.mean(jaccard)
+
+    print('Valid loss: {:.5f}, jaccard: {:.5f}'.format(valid_loss, valid_jaccard))
+    metrics = {'valid_loss': valid_loss, 'jaccard_loss': valid_jaccard}
+    return metrics
 
 
 def test(args):
-    print("Testing the network")
-    dataset = Dataset(args)
-    unet = UnetModel(args)
+    test_paths = os.listdir(os.path.join(args.dataset_dir, args.test_img_dir))
+    print(len(test_paths), 'test images found')
+    test_df = pd.DataFrame({'ImageId': test_paths, 'EncodedPixels': None})
+    from skimage.morphology import binary_opening, disk
+    test_df = test_df[:5000]
+    test_loader = make_dataloader(test_df, batch_size=args.batch_size, shuffle=False, transform=None, mode='predict')
 
-    latest_model_epoch = 14
+    model = UNet()
+    fold = 1
+    model_path = Path('model_{fold}.pt'.format(fold=fold))
+    state = torch.load(str(model_path))
+    state = {key.replace('module.', ''): value for key, value in state['model'].items()}
+    model.load_state_dict(state)
 
-    with tf.Session() as sess:
-        test_X, test_img_id = dataset.test_iter.get_next()
-        y_pred = unet.full_res_net(test_X)
-        saver = tf.train.Saver()
-        unet.restore_checkpoint(saver, sess, latest_model_epoch)
-        sess.run(dataset.test_init_op)
+    out_pred_rows = []
 
-        out_pred_rows = []
-        for batch_id in range(args.test_batches):
-            print("Testing batch", batch_id)
-            curbatch_seg = sess.run(y_pred)
-            for idx, one_seg in enumerate(curbatch_seg):
-                cur_rles = multi_rle_encode(one_seg)
-                if cur_rles is not None:
-                    for one_rle in cur_rles:
-                        out_pred_rows += [[test_img_id[idx], one_rle]]
+    for batch_id, (inputs, image_paths) in enumerate(tqdm(test_loader, desc='Predict')):
+        inputs = torch.tensor(inputs)
+        outputs = model(inputs)
+        for i, image_name in enumerate(image_paths):
+            mask = F.sigmoid(outputs[i, 0]).data.cpu().numpy()
+            cur_seg = binary_opening(mask > 0.5, disk(2))
+            cur_rles = multi_rle_encode(cur_seg)
+            if len(cur_rles) > 0:
+                for c_rle in cur_rles:
+                    out_pred_rows += [{'ImageId': image_name, 'EncodedPixels': c_rle}]
+            else:
+                out_pred_rows += [{'ImageId': image_name, 'EncodedPixels': None}]
 
-        print("Finished test all images")
-        test_df = pd.DataFrame(out_pred_rows)
-        test_df.columns = ['ImageId', 'EncodedPixels']
-        test_df.to_csv(os.path.join(args.result_dir, "submission.csv"))
-        print(test_df.head())
+    submission_df = pd.DataFrame(out_pred_rows)[['ImageId', 'EncodedPixels']]
+    submission_df.to_csv('submission.csv', index=False)
 
 
 def main():
     args = Options().parse()
     if args.subcommand is None:
         raise ValueError('ERROR: specify the experiment type')
-    if args.gpu and not tf.test.is_gpu_available():
+    if args.gpu and not torch.cuda.is_available():
         raise ValueError('ERROR: gpu is not available, try running on cpu')
 
     if args.subcommand == 'train':
@@ -115,8 +157,8 @@ def main():
     elif args.subcommand == 'test':
         test(args)
     else:
-        raise ValueError('ERROR: Unknow experiment type')
+        raise ValueError('ERROR: unknown experiment type')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
