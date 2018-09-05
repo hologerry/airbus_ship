@@ -5,7 +5,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-import torch.functional as F
 from torch.optim import Adam
 from tqdm import tqdm
 
@@ -20,6 +19,8 @@ from model.loss import get_jaccard
 from option import Options
 from utils import write_event
 from utils import save_model
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 
 def train(args):
@@ -40,16 +41,16 @@ def train(args):
     ])
 
     train_dataloader = make_dataloader(train_df, args, args.batch_size, args.shuffle, transform=train_transform)
-    val_dataloader = make_dataloader(valid_df, args, args.batch_size//2, args.shuffle, transform=val_transform)
+    val_dataloader = make_dataloader(valid_df, args, args.batch_size//4, args.shuffle, transform=val_transform)
 
     model = UNet()
     optimizer = Adam(model.parameters(), lr=args.lr)
-    if args.gpu:
-        model.cuda()
+    if args.gpu and torch.cuda.is_available():
+        model = model.cuda()
     step = 0
-    fold = 1
-    model_path = Path('model_{fold}.pt'.format(fold=fold))
-    log_file = open('train_{fold}.log'.format(fold=fold), 'at', encoding='utf8')
+    run_id = 1
+    model_path = Path('model_{run_id}.pt'.format(run_id=run_id))
+    log_file = open('train_{run_id}.log'.format(run_id=run_id), 'at', encoding='utf8')
     loss_fn = LossBinary(jaccard_weight=5)
 
     valid_losses = []
@@ -64,13 +65,16 @@ def train(args):
             mean_loss = 0.
             for i, (inputs, targets) in enumerate(train_dataloader):
                 inputs, targets = torch.tensor(inputs), torch.tensor(targets)
+                if args.gpu and torch.cuda.is_available():
+                    inputs = inputs.cuda()
+                    targets = targets.cuda()
                 outputs = model(inputs)
                 loss = loss_fn(outputs, targets)
                 loss.backward()
                 optimizer.step()
                 step += 1
                 tq.update(args.batch_size)
-                losses.append(loss.data[0])
+                losses.append(loss.item())
                 mean_loss = np.mean(losses[-args.log_fr:])
                 tq.set_postfix(loss="{:.5f}".format(mean_loss))
 
@@ -79,24 +83,32 @@ def train(args):
             write_event(log_file, step, loss=mean_loss)
             tq.close()
             save_model(model, epoch, step, model_path)
+
             valid_metrics = validation(args, model, loss_fn, val_dataloader)
             write_event(log_file, step, **valid_metrics)
             valid_loss = valid_metrics['valid_loss']
             valid_losses.append(valid_loss)
+
         except KeyboardInterrupt:
             tq.close()
             print('Ctrl+C, saving snapshot')
-            save_model(log_file, epoch, step, model_path)
+            save_model(model, epoch, step, model_path)
             print('done.')
             return
 
 
 def validation(args, model: torch.nn.Module, criterion, valid_loader):
+    print("Validating Network...")
+    if args.gpu and torch.cuda.is_available():
+        model = model.cuda()
     model.eval()
     losses = []
     jaccard = []
     for inputs, targets in valid_loader:
         inputs, targets = torch.tensor(inputs), torch.tensor(targets)
+        if args.gpu and torch.cuda.is_available():
+            inputs = inputs.cuda()
+            targets = targets.cuda()
         outputs = model(inputs)
         loss = criterion(outputs, targets)
         losses.append(loss.item())
@@ -107,21 +119,27 @@ def validation(args, model: torch.nn.Module, criterion, valid_loader):
     valid_jaccard = np.mean(jaccard)
 
     print('Valid loss: {:.5f}, jaccard: {:.5f}'.format(valid_loss, valid_jaccard))
-    metrics = {'valid_loss': valid_loss, 'jaccard_loss': valid_jaccard}
+    metrics = {'valid_loss': valid_loss, 'jaccard': valid_jaccard}
     return metrics
 
 
 def test(args):
+    print("Predicting ...")
     test_paths = os.listdir(os.path.join(args.dataset_dir, args.test_img_dir))
     print(len(test_paths), 'test images found')
     test_df = pd.DataFrame({'ImageId': test_paths, 'EncodedPixels': None})
+
     from skimage.morphology import binary_opening, disk
+
     test_df = test_df[:5000]
-    test_loader = make_dataloader(test_df, batch_size=args.batch_size, shuffle=False, transform=None, mode='predict')
+    test_loader = make_dataloader(test_df, args, batch_size=args.batch_size,
+                                  shuffle=False, transform=None, mode='predict')
 
     model = UNet()
-    fold = 1
-    model_path = Path('model_{fold}.pt'.format(fold=fold))
+    if args.gpu and torch.cuda.is_available():
+        model = model.cuda()
+    run_id = 1
+    model_path = Path('model_{run_id}.pt'.format(run_id=run_id))
     state = torch.load(str(model_path))
     state = {key.replace('module.', ''): value for key, value in state['model'].items()}
     model.load_state_dict(state)
@@ -129,10 +147,12 @@ def test(args):
     out_pred_rows = []
 
     for batch_id, (inputs, image_paths) in enumerate(tqdm(test_loader, desc='Predict')):
+        if args.gpu and torch.cuda.is_available():
+            inputs = inputs.cuda()
         inputs = torch.tensor(inputs)
         outputs = model(inputs)
         for i, image_name in enumerate(image_paths):
-            mask = F.sigmoid(outputs[i, 0]).data.cpu().numpy()
+            mask = torch.sigmoid(outputs[i, 0]).data.cpu().numpy()
             cur_seg = binary_opening(mask > 0.5, disk(2))
             cur_rles = multi_rle_encode(cur_seg)
             if len(cur_rles) > 0:
@@ -143,6 +163,7 @@ def test(args):
 
     submission_df = pd.DataFrame(out_pred_rows)[['ImageId', 'EncodedPixels']]
     submission_df.to_csv('submission.csv', index=False)
+    print("done.")
 
 
 def main():

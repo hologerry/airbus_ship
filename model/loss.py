@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class LossBinary:
     """
      Implementation from  https://github.com/ternaus/robot-surgery-segmentation
+     loss = BCE - weight * IoU
     """
 
     def __init__(self, jaccard_weight=0):
@@ -18,7 +18,7 @@ class LossBinary:
         if self.jaccard_weight:
             eps = 1e-15
             jaccard_target = (targets == 1.0).float()
-            jaccard_output = F.sigmoid(outputs)
+            jaccard_output = torch.sigmoid(outputs)
 
             intersection = (jaccard_output * jaccard_target).sum()
             union = jaccard_output.sum() + jaccard_target.sum()
@@ -28,8 +28,15 @@ class LossBinary:
 
 
 def get_jaccard(y_true, y_pred):
-    print(y_pred.shape)
-    print(y_true.shape)
+    """calculate IoU
+
+    Arguments:
+        y_true {tensor (b, c, h, w)} -- true mask
+        y_pred {tensor (b, c, h, w)} -- predictate mask
+
+    Returns:
+        [tensor scaler] -- [batch mean IoU]
+    """
     epsilon = 1e-15
     intersection = (y_pred * y_true).sum(dim=-2).sum(dim=-1).sum(dim=-1)
     union = y_true.sum(dim=-2).sum(dim=-1).sum(dim=-1) + y_pred.sum(dim=-2).sum(dim=-1).sum(dim=-1)
