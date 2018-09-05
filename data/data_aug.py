@@ -56,7 +56,7 @@ class ImageOnly:
         self.transforms = transforms
 
     def __call__(self, x, mask=None):
-        return self.trans(x), mask
+        return self.transforms(x), mask
 
 
 class VerticalFlip:
@@ -68,6 +68,8 @@ class VerticalFlip:
             img = cv2.flip(img, 0)
             if mask is not None:
                 mask = cv2.flip(mask, 0)
+                if mask.ndim == 2:
+                    mask = np.expand_dims(mask, axis=2)
         return img, mask
 
 
@@ -80,6 +82,8 @@ class HorizontalFlip:
             img = cv2.flip(img, 1)
             if mask is not None:
                 mask = cv2.flip(mask, 1)
+                if mask.ndim == 2:
+                    mask = np.expand_dims(mask, axis=2)
         return img, mask
 
 
@@ -139,6 +143,8 @@ class Rotate:
                 mask = cv2.warpAffine(mask, mat, (height, width),
                                       flags=cv2.INTER_LINEAR,
                                       borderMode=cv2.BORDER_REFLECT_101)
+                if mask.ndim == 2:
+                    mask = np.expand_dims(mask, axis=2)
 
         return img, mask
 
@@ -151,7 +157,10 @@ class Resize:
     def __call__(self, img, mask=None):
         img = cv2.resize(img, (self.h, self.w))
         if mask is not None:
+            # cv2 will reduce the last dim
             mask = cv2.resize(mask, (self.h, self.w))
+            if mask.ndim == 2:
+                mask = np.expand_dims(mask, axis=2)
         return img, mask
 
 
@@ -203,8 +212,9 @@ class Shift:
             if mask is not None:
                 msk1 = cv2.copyMakeBorder(mask, limit + 1, limit + 1, limit + 1, limit + 1,
                                           borderType=cv2.BORDER_REFLECT_101)
+                if msk1.ndim == 2:
+                    msk1 = np.expand_dims(msk1, axis=2)
                 mask = msk1[y1:y2, x1:x2, :]
-
         return img, mask
 
 
@@ -239,6 +249,8 @@ class ShiftScale:
             if mask is not None:
                 msk1 = cv2.copyMakeBorder(
                     mask, limit, limit, limit, limit, borderType=cv2.BORDER_REFLECT_101)
+                if msk1.ndim == 2:
+                    msk1 = np.expand_dims(msk1, axis=2)
                 mask = (msk1[y1:y2, x1:x2, :]
                         if size == size0 else cv2.resize(msk1[y1:y2, x1:x2, :], (size0, size0),
                                                          interpolation=cv2.INTER_LINEAR))
@@ -284,7 +296,8 @@ class ShiftScaleRotate:
                 mask = cv2.warpPerspective(mask, mat, (width, height),
                                            flags=cv2.INTER_NEAREST,
                                            borderMode=cv2.BORDER_REFLECT_101)
-
+                if mask.ndim == 2:
+                    mask = np.expand_dims(mask, axis=2)
         return img, mask
 
 

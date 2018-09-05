@@ -22,7 +22,9 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 
 def train(args):
-    print("Traning Network...")
+    print("Traning")
+    
+    print("Prepaing data")
     masks = pd.read_csv(os.path.join(args.dataset_dir, args.train_masks))
     unique_img_ids = get_unique_img_ids(masks, args)
     train_df, valid_df = get_balanced_train_valid(masks, unique_img_ids, args)
@@ -46,6 +48,7 @@ def train(args):
     train_dataloader = make_dataloader(train_df, args, args.batch_size, args.shuffle, transform=train_transform)
     val_dataloader = make_dataloader(valid_df, args, args.val_batch_size, args.shuffle, transform=val_transform)
 
+    # Build model
     model = UNet()
     optimizer = Adam(model.parameters(), lr=args.lr)
     if args.gpu and torch.cuda.is_available():
@@ -58,11 +61,12 @@ def train(args):
 
     valid_losses = []
 
+    print("Start training ...")
     for epoch in range(1, args.epochs+1):
         model.train()
         random.seed()
         tq = tqdm(total=len(train_dataloader)*args.batch_size)
-        tq.set_description('Epoch {} of {}, lr {}'.format(epoch, args.epochs, args.lr))
+        tq.set_description('Run Id {}, epoch {} of {}, lr {}'.format(run_id, epoch, args.epochs, args.lr))
         losses = []
         try:
             mean_loss = 0.
@@ -142,6 +146,7 @@ def test(args):
     if args.gpu and torch.cuda.is_available():
         model = model.cuda()
     run_id = 1
+    print("Resuming run #{}...".format(run_id))
     model_path = Path('model_{run_id}.pt'.format(run_id=run_id))
     state = torch.load(str(model_path))
     state = {key.replace('module.', ''): value for key, value in state['model'].items()}

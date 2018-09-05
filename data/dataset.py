@@ -39,9 +39,11 @@ class ShipDataset(Dataset):
         img = imread(rgb_path)
         mask = masks_as_image(self.image_masks[index])
 
+        # np array transform first
         if self.transform is not None:
             img, mask = self.transform(img, mask)
 
+        # To tensor and normalize
         if self.mode == 'train':
             return self.image_transform(img), torch.from_numpy(np.moveaxis(mask, -1, 0)).float()
         else:
@@ -50,4 +52,5 @@ class ShipDataset(Dataset):
 
 def make_dataloader(in_df, args, batch_size, shuffle=False, transform=None, mode='train'):
     return DataLoader(dataset=ShipDataset(in_df, args, transform=transform, mode=mode),
-                      shuffle=shuffle, num_workers=0, batch_size=batch_size, pin_memory=torch.cuda.is_available())
+                      shuffle=shuffle, num_workers=batch_size,
+                      batch_size=batch_size, pin_memory=torch.cuda.is_available())
