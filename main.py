@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.optim import Adam
+from torch.optim.lr_scheduler import StepLR
 from tqdm import tqdm
 
 from data.data_aug import (DualCompose, HorizontalFlip, RandomRotate90, Resize,
@@ -23,13 +24,27 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 def train(args):
     print("Traning")
-    
+
     print("Prepaing data")
     masks = pd.read_csv(os.path.join(args.dataset_dir, args.train_masks))
     unique_img_ids = get_unique_img_ids(masks, args)
     train_df, valid_df = get_balanced_train_valid(masks, unique_img_ids, args)
+
+    if args.optim == 0:
+        train_shape = (256, 256)
+        batch_size = args.batch_size
+        extra_epoch = 0
+    elif args.optim == 1:
+        train_shape = (384, 384)
+        batch_size = args.batch_size // 4
+        extra_epoch = 8
+    elif args.optim == 2:
+        train_shape = (768, 768)
+        batch_size = args.batch_size // 8
+        extra_epoch = 4
+
     train_transform = DualCompose([
-        Resize((256, 256)),
+        Resize(train_shape),
         HorizontalFlip(),
         VerticalFlip(),
         # RandomCrop((256, 256, 3)),
@@ -39,34 +54,51 @@ def train(args):
         # ImageOnly(RandomBrightness()),
         # ImageOnly(RandomContrast()),
     ])
-
     val_transform = DualCompose([
         Resize((512, 512)),
         # CenterCrop((512, 512, 3)),
     ])
 
-    train_dataloader = make_dataloader(train_df, args, args.batch_size, args.shuffle, transform=train_transform)
+    train_dataloader = make_dataloader(train_df, args, batch_size, args.shuffle, transform=train_transform)
     val_dataloader = make_dataloader(valid_df, args, args.val_batch_size, args.shuffle, transform=val_transform)
 
     # Build model
     model = UNet()
     optimizer = Adam(model.parameters(), lr=args.lr)
+    scheduler = StepLR(optimizer, step_size=args.decay_fr, gamma=0.1)
     if args.gpu and torch.cuda.is_available():
         model = model.cuda()
-    step = 0
+
+    # Restore model ...
     run_id = 3
+
     model_path = Path('model_{run_id}.pt'.format(run_id=run_id))
+    if not model_path.exists() and args.optim > 0:
+        raise ValueError('model_{run_id}.pt does not exist, initial train first.'.format(run_id=run_id))
+    if model_path.exists():
+        state = torch.load(str(model_path))
+        epoch = state['epoch']
+        step = state['step']
+        model.load_state_dict(state['model'])
+        print('Restore model, epoch {}, step {:,}'.format(epoch, step))
+    else:
+        epoch = 1
+        step = 0
+
     log_file = open('train_{run_id}.log'.format(run_id=run_id), 'at', encoding='utf8')
     loss_fn = LossBinary(jaccard_weight=5)
 
     valid_losses = []
 
     print("Start training ...")
-    for epoch in range(1, args.epochs+1):
+    for _ in range(epoch):
+        scheduler.step()
+    for epoch in range(epoch, args.epochs+extra_epoch):
+        scheduler.step()
         model.train()
         random.seed()
         tq = tqdm(total=len(train_dataloader)*args.batch_size)
-        tq.set_description('Run Id {}, epoch {} of {}, lr {}'.format(run_id, epoch, args.epochs, args.lr))
+        tq.set_description('Run Id {}, Epoch {} of {}, lr {}'.format(run_id, epoch, args.epochs, args.lr))
         losses = []
         try:
             mean_loss = 0.
@@ -75,10 +107,12 @@ def train(args):
                 if args.gpu and torch.cuda.is_available():
                     inputs = inputs.cuda()
                     targets = targets.cuda()
+
                 outputs = model(inputs)
                 loss = loss_fn(outputs, targets)
                 loss.backward()
                 optimizer.step()
+
                 step += 1
                 tq.update(args.batch_size)
                 losses.append(loss.item())
