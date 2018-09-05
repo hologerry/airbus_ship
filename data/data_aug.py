@@ -143,6 +143,18 @@ class Rotate:
         return img, mask
 
 
+class Resize:
+    def __init__(self, size):
+        self.h = size[0]
+        self.w = size[1]
+
+    def __call__(self, img, mask=None):
+        img = cv2.resize(img, (self.h, self.w))
+        if mask is not None:
+            mask = cv2.resize(mask, (self.h, self.w))
+        return img, mask
+
+
 class RandomCrop:
     def __init__(self, size):
         self.h = size[0]

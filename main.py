@@ -8,17 +8,15 @@ import torch
 from torch.optim import Adam
 from tqdm import tqdm
 
-from data.data_aug import (CenterCrop, DualCompose, HorizontalFlip, RandomCrop,
-                           VerticalFlip)
+from data.data_aug import (DualCompose, HorizontalFlip, RandomRotate90, Resize,
+                           Shift, Transpose, VerticalFlip)
 from data.dataset import make_dataloader
 from data.load_data import get_balanced_train_valid, get_unique_img_ids
 from data.rle import multi_rle_encode
+from model.loss import LossBinary, get_jaccard
 from model.unet import UNet
-from model.loss import LossBinary
-from model.loss import get_jaccard
 from option import Options
-from utils import write_event
-from utils import save_model
+from utils import save_model, write_event
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
@@ -29,26 +27,31 @@ def train(args):
     unique_img_ids = get_unique_img_ids(masks, args)
     train_df, valid_df = get_balanced_train_valid(masks, unique_img_ids, args)
     train_transform = DualCompose([
+        Resize((256, 256)),
         HorizontalFlip(),
         VerticalFlip(),
-        RandomCrop((256, 256, 3)),
+        # RandomCrop((256, 256, 3)),
+        RandomRotate90(),
+        Shift(),
+        Transpose(),
         # ImageOnly(RandomBrightness()),
         # ImageOnly(RandomContrast()),
     ])
 
     val_transform = DualCompose([
-        CenterCrop((512, 512, 3)),
+        Resize((512, 512)),
+        # CenterCrop((512, 512, 3)),
     ])
 
     train_dataloader = make_dataloader(train_df, args, args.batch_size, args.shuffle, transform=train_transform)
-    val_dataloader = make_dataloader(valid_df, args, args.batch_size//4, args.shuffle, transform=val_transform)
+    val_dataloader = make_dataloader(valid_df, args, args.val_batch_size, args.shuffle, transform=val_transform)
 
     model = UNet()
     optimizer = Adam(model.parameters(), lr=args.lr)
     if args.gpu and torch.cuda.is_available():
         model = model.cuda()
     step = 0
-    run_id = 1
+    run_id = 3
     model_path = Path('model_{run_id}.pt'.format(run_id=run_id))
     log_file = open('train_{run_id}.log'.format(run_id=run_id), 'at', encoding='utf8')
     loss_fn = LossBinary(jaccard_weight=5)
