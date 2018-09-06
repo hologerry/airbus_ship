@@ -12,7 +12,7 @@ def get_unique_img_ids(masks, args):
     masks: all masks DataFrame
     Return: unique_img_ids DataFrame "ImageId  ships  has_ships has_ships_vec  img_file_size_kb"
     """
-    masks = masks[masks.ImageId != '6384c3e78.jpg']
+    masks = masks.loc[masks.ImageId != '6384c3e78.jpg'].copy()
     masks['ships'] = masks['EncodedPixels'].map(lambda c_row: 1 if isinstance(c_row, str) else 0)
     unique_img_ids = masks.groupby('ImageId').agg({'ships': 'sum'}).reset_index()
     unique_img_ids['has_ships'] = unique_img_ids['ships'].map(lambda x: 1 if x > 0 else 0)

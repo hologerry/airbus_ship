@@ -1,7 +1,8 @@
 """Util functions
 """
-from datetime import datetime
 import json
+from datetime import datetime
+
 import torch
 
 
@@ -19,3 +20,7 @@ def save_model(model, epoch, step, model_path):
         'epoch': epoch,
         'step': step,
     }, str(model_path))
+
+
+def dump_configs(args):
+    pass

@@ -30,24 +30,29 @@ def train(args):
     unique_img_ids = get_unique_img_ids(masks, args)
     train_df, valid_df = get_balanced_train_valid(masks, unique_img_ids, args)
 
-    if args.optim == 0:
+    if args.stage == 0:
         train_shape = (256, 256)
-        batch_size = args.batch_size
-        extra_epoch = 0
-    elif args.optim == 1:
+        batch_size = args.stage0_batch_size
+        extra_epoch = args.stage0_epochs
+    elif args.stage == 1:
         train_shape = (384, 384)
-        batch_size = args.batch_size // 4
-        extra_epoch = 8
-    elif args.optim == 2:
+        batch_size = args.stage1_batch_size
+        extra_epoch = args.stage1_epochs
+    elif args.stage == 2:
+        train_shape = (512, 512)
+        batch_size = args.stage2_batch_size
+        extra_epoch = args.stage2_epochs
+    elif args.stage == 3:
         train_shape = (768, 768)
-        batch_size = args.batch_size // 8
-        extra_epoch = 4
+        batch_size = args.stage3_batch_size
+        extra_epoch = args.stage3_epochs
+
+    print("Stage {}".format(args.stage))
 
     train_transform = DualCompose([
         Resize(train_shape),
         HorizontalFlip(),
         VerticalFlip(),
-        # RandomCrop((256, 256, 3)),
         RandomRotate90(),
         Shift(),
         Transpose(),
@@ -55,12 +60,11 @@ def train(args):
         # ImageOnly(RandomContrast()),
     ])
     val_transform = DualCompose([
-        Resize((512, 512)),
-        # CenterCrop((512, 512, 3)),
+        Resize(train_shape),
     ])
 
     train_dataloader = make_dataloader(train_df, args, batch_size, args.shuffle, transform=train_transform)
-    val_dataloader = make_dataloader(valid_df, args, args.val_batch_size, args.shuffle, transform=val_transform)
+    val_dataloader = make_dataloader(valid_df, args, batch_size//2, args.shuffle, transform=val_transform)
 
     # Build model
     model = UNet()
@@ -70,35 +74,38 @@ def train(args):
         model = model.cuda()
 
     # Restore model ...
-    run_id = 3
+    run_id = 4
 
     model_path = Path('model_{run_id}.pt'.format(run_id=run_id))
-    if not model_path.exists() and args.optim > 0:
+    if not model_path.exists() and args.stage > 0:
         raise ValueError('model_{run_id}.pt does not exist, initial train first.'.format(run_id=run_id))
     if model_path.exists():
         state = torch.load(str(model_path))
-        epoch = state['epoch']
+        last_epoch = state['epoch']
         step = state['step']
         model.load_state_dict(state['model'])
-        print('Restore model, epoch {}, step {:,}'.format(epoch, step))
+        print('Restore model, epoch {}, step {:,}'.format(last_epoch, step))
     else:
-        epoch = 1
+        last_epoch = 1
         step = 0
 
     log_file = open('train_{run_id}.log'.format(run_id=run_id), 'at', encoding='utf8')
-    loss_fn = LossBinary(jaccard_weight=5)
+
+    loss_fn = LossBinary(jaccard_weight=args.iou_weight)
 
     valid_losses = []
 
     print("Start training ...")
-    for _ in range(epoch):
+    for _ in range(last_epoch):
         scheduler.step()
-    for epoch in range(epoch, args.epochs+extra_epoch):
+
+    for epoch in range(last_epoch, last_epoch+extra_epoch):
         scheduler.step()
         model.train()
         random.seed()
-        tq = tqdm(total=len(train_dataloader)*args.batch_size)
-        tq.set_description('Run Id {}, Epoch {} of {}, lr {}'.format(run_id, epoch, args.epochs, args.lr))
+        tq = tqdm(total=len(train_dataloader)*batch_size)
+        tq.set_description('Run Id {}, Epoch {} of {}, lr {}'.format(run_id, epoch, last_epoch+extra_epoch,
+                                                                     args.lr * (0.1 ** (epoch // args.decay_fr))))
         losses = []
         try:
             mean_loss = 0.
@@ -114,7 +121,7 @@ def train(args):
                 optimizer.step()
 
                 step += 1
-                tq.update(args.batch_size)
+                tq.update(batch_size)
                 losses.append(loss.item())
                 mean_loss = np.mean(losses[-args.log_fr:])
                 tq.set_postfix(loss="{:.5f}".format(mean_loss))
@@ -134,8 +141,9 @@ def train(args):
             tq.close()
             print('Ctrl+C, saving snapshot')
             save_model(model, epoch, step, model_path)
-            print('done.')
+            print('Terminated.')
             return
+    print('Done.')
 
 
 def validation(args, model: torch.nn.Module, criterion, valid_loader):
