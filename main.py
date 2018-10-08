@@ -63,8 +63,10 @@ def train(args):
         Resize(train_shape),
     ])
 
-    train_dataloader = make_dataloader(train_df, args, batch_size, args.shuffle, transform=train_transform)
-    val_dataloader = make_dataloader(valid_df, args, batch_size//2, args.shuffle, transform=val_transform)
+    train_dataloader = make_dataloader(
+        train_df, args, batch_size, args.shuffle, transform=train_transform)
+    val_dataloader = make_dataloader(
+        valid_df, args, batch_size//2, args.shuffle, transform=val_transform)
 
     # Build model
     model = UNet()
@@ -78,7 +80,8 @@ def train(args):
 
     model_path = Path('model_{run_id}.pt'.format(run_id=run_id))
     if not model_path.exists() and args.stage > 0:
-        raise ValueError('model_{run_id}.pt does not exist, initial train first.'.format(run_id=run_id))
+        raise ValueError(
+            'model_{run_id}.pt does not exist, initial train first.'.format(run_id=run_id))
     if model_path.exists():
         state = torch.load(str(model_path))
         last_epoch = state['epoch']
@@ -89,7 +92,8 @@ def train(args):
         last_epoch = 1
         step = 0
 
-    log_file = open('train_{run_id}.log'.format(run_id=run_id), 'at', encoding='utf8')
+    log_file = open('train_{run_id}.log'.format(
+        run_id=run_id), 'at', encoding='utf8')
 
     loss_fn = LossBinary(jaccard_weight=args.iou_weight)
 
@@ -142,7 +146,6 @@ def train(args):
             print('Ctrl+C, saving snapshot')
             save_model(model, epoch, step, model_path)
             print('Terminated.')
-            return
     print('Done.')
 
 
@@ -167,7 +170,8 @@ def validation(args, model: torch.nn.Module, criterion, valid_loader):
 
     valid_jaccard = np.mean(jaccard)
 
-    print('Valid loss: {:.5f}, jaccard: {:.5f}'.format(valid_loss, valid_jaccard))
+    print('Valid loss: {:.5f}, jaccard: {:.5f}'.format(
+        valid_loss, valid_jaccard))
     metrics = {'valid_loss': valid_loss, 'jaccard': valid_jaccard}
     return metrics
 
@@ -191,7 +195,8 @@ def test(args):
     print("Resuming run #{}...".format(run_id))
     model_path = Path('model_{run_id}.pt'.format(run_id=run_id))
     state = torch.load(str(model_path))
-    state = {key.replace('module.', ''): value for key, value in state['model'].items()}
+    state = {key.replace('module.', ''): value for key,
+             value in state['model'].items()}
     model.load_state_dict(state)
 
     out_pred_rows = []
@@ -207,9 +212,11 @@ def test(args):
             cur_rles = multi_rle_encode(cur_seg)
             if len(cur_rles) > 0:
                 for c_rle in cur_rles:
-                    out_pred_rows += [{'ImageId': image_name, 'EncodedPixels': c_rle}]
+                    out_pred_rows += [{'ImageId': image_name,
+                                       'EncodedPixels': c_rle}]
             else:
-                out_pred_rows += [{'ImageId': image_name, 'EncodedPixels': None}]
+                out_pred_rows += [{'ImageId': image_name,
+                                   'EncodedPixels': None}]
 
     submission_df = pd.DataFrame(out_pred_rows)[['ImageId', 'EncodedPixels']]
     submission_df.to_csv('submission.csv', index=False)

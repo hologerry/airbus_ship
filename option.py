@@ -36,7 +36,7 @@ class Options():
         train_arg.add_argument("--stage3_epochs", type=int, default=4, help="number of initial taining epochs")
 
         train_arg.add_argument("--lr", type=float, default=0.0001, help="learning rate")
-        train_arg.add_argument("--decay_fr", type=int, default=10, help="frequency of learning rate decay")
+        train_arg.add_argument("--decay_fr", type=int, default=30, help="frequency of learning rate decay")
         train_arg.add_argument("--log_fr", type=int, default=50, help="frequency of saving log")
         train_arg.add_argument("--debug", type=bool, default=False, help="debug?")
         train_arg.add_argument("--train_valid_ratio", type=float, default=0.05, help="train valid tratio")

@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 run_id = 4
 
-log_file = 'train_{run_id}.log'.format(run_id=run_id)
+log_file = '~/Desktop/train_{run_id}.log'.format(run_id=run_id)
 logs = pd.read_json(log_file, lines=True)
 
 plt.figure(figsize=(20, 40))
